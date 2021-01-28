@@ -1,0 +1,21 @@
+version: "3"
+
+services:
+  e-wallet:
+    image: golang:1.13-alpine
+    volumes:
+      - .:/go/src/e-wallet
+    working_dir: /go/src/e-wallet
+    ports:
+      - "8080:8080"
+    environment: 
+      - PORT=8080
+      - DB_USER_URL=postgres://ghozi:ghozi@db_user_service:5432/db_user?sslmode=disable
+      - MAX_CONNECTION_POOL=10
+    command: go run cmd/e-wallet/main.go
+volumes:
+  data:
+networks: 
+  default:
+    external: 
+      name: payment-house
