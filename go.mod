@@ -1,4 +1,4 @@
-module linkaja.com/e-wallet
+module abcd.xyz/e-wallet
 
 go 1.13
 
