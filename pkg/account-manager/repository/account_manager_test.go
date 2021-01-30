@@ -1,17 +1,18 @@
 package repository
 
 import (
-	"database/sql"
-	"regexp"
+	"fmt"
 	"sync"
 	"testing"
 
 	"github.com/jinzhu/gorm"
 	"github.com/labstack/echo"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"gopkg.in/DATA-DOG/go-sqlmock.v1"
 	model "linkaja.com/e-wallet/pkg/account-manager/model/db"
+	testdata "linkaja.com/e-wallet/pkg/account-manager/test_data"
 )
 
 type Suite struct {
@@ -20,6 +21,7 @@ type Suite struct {
 	mock sqlmock.Sqlmock
 	e    *echo.Echo
 	m    sync.Mutex
+	tdb  testdata.TestDB
 
 	rp AccountManagerRepo
 }
@@ -31,22 +33,24 @@ var (
 )
 
 func (s *Suite) SetupSuite() {
-	var (
-		db  *sql.DB
-		err error
-	)
+	// create mock db user using sqllite3
+	// file::memory:?cache=shared >>> prevent table not found
+	mockDBUser, err := gorm.Open("sqlite3", "file::memory:?cache=shared")
+	if err != nil {
+		panic(err.Error())
+	} else {
+		fmt.Println("Successfully Connected!")
+	}
+	mockDBUser.Exec("PRAGMA foreign_keys = ON") // SQLite defaults to `foreign_keys = off'`
 
-	db, s.mock, err = sqlmock.New()
-	require.NoError(s.T(), err)
-
-	s.DB, err = gorm.Open("postgres", db)
-	require.NoError(s.T(), err)
+	s.tdb = testdata.NewTestDB(mockDBUser)
+	s.DB = mockDBUser
 
 	s.rp = NewAccountManagerRepo(s.DB)
 }
 
 func (s *Suite) AfterTest(_, _ string) {
-	require.NoError(s.T(), s.mock.ExpectationsWereMet())
+	// require.NoError(s.T(), s.mock.ExpectationsWereMet())
 }
 
 func TestInit(t *testing.T) {
@@ -54,38 +58,38 @@ func TestInit(t *testing.T) {
 }
 
 func (s *Suite) TestGetAccountInfo() {
-	s.mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT ca.account_number as account_number, c.customer_name as customer_name, ca.account_balance as account_balance FROM customer_accounts ca join customers as c on ca.customer_number = c.customer_number WHERE (ca.account_number = $1)`)).
-		WithArgs(1).
-		WillReturnRows(sqlmock.NewRows(accInfoFiled).AddRow(1, "John", 1000))
+	s.tdb.ResetDB()
+	s.tdb.PopulateDB()
 	result := s.rp.GetAccountInfo(1)
 	require.NoError(s.T(), result.Error)
 
-	s.mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT ca.account_number as account_number, c.customer_name as customer_name, ca.account_balance as account_balance FROM customer_accounts ca join customers as c on ca.customer_number = c.customer_number WHERE (ca.account_number = $1)`)).
-		WithArgs(0).
-		WillReturnRows(sqlmock.NewRows(nil))
 	result = s.rp.GetAccountInfo(0)
 	require.Error(s.T(), result.Error)
 }
 
 func (s *Suite) TestUpdateBalance() {
+	s.tdb.ResetDB()
+	s.tdb.PopulateDB()
+
 	custAccA := custAcc.NewCustomerAccount(1, 1, 1000)
-
-	query := regexp.QuoteMeta(`UPDATE "customer_accounts" SET "account_balance" = $1 WHERE (account_number = $2)`)
-	s.mock.ExpectBegin()
-	s.mock.ExpectExec(query).WithArgs(custAccA.Balance, custAccA.AccountNumber).WillReturnResult(sqlmock.NewResult(0, 0))
-	s.mock.ExpectCommit()
-
 	isSuccess := s.rp.UpdateBalance(*custAccA)
 	require.Equal(s.T(), true, isSuccess)
 
-	// s.mock.ExpectBegin()
-	// s.mock.ExpectExec(query).WithArgs(custAccA.Balance, custAccA.AccountNumber).WillReturnResult(sqlmock.NewResult(0, 0))
-	// s.mock.ExpectCommit()
-
-	custAccA.AccountNumber = 2
-	isSuccess = s.rp.UpdateBalance(*custAccA)
+	s.DB.DropTable(model.CustomerAccount{})
+	isSuccess = s.rp.UpdateBalance(model.CustomerAccount{})
 	require.Equal(s.T(), false, isSuccess)
+}
 
+func (s *Suite) TestCheckUserAndPassword() {
+	s.tdb.ResetDB()
+	s.tdb.PopulateDB()
+
+	customer := &model.Customer{}
+	customer = customer.NewCustomer(2, "KEANU", "abcdef")
+	result := s.rp.CheckUserAndPassword(customer)
+	require.NoError(s.T(), result.Error)
+
+	customer = customer.NewCustomer(0, "AA", "BB")
+	result = s.rp.CheckUserAndPassword(customer)
+	require.Error(s.T(), result.Error)
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/labstack/echo"
 	models "linkaja.com/e-wallet/lib/base_models"
+	model "linkaja.com/e-wallet/pkg/account-manager/model/db"
 	"linkaja.com/e-wallet/pkg/account-manager/model/dto"
 	"linkaja.com/e-wallet/pkg/account-manager/usecase"
 )
@@ -22,11 +23,24 @@ func NewAccountManagerHandler(accountManagerUC usecase.AccountManagerUsecase) *H
 	}
 }
 
+// Mount :
 func (h *HTTPHandler) Mount(group *echo.Group) {
 	group.GET("/account/:account_number", h.AccountInfo)
 	group.POST("/account/:account_number/transfer", h.Transfer)
+	group.GET("/account/login", h.Login)
 }
 
+// Login :
+func (h *HTTPHandler) Login(c echo.Context) error {
+	var cust model.Customer
+	if err := c.Bind(cust); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, "Invalid json provided")
+		return err
+	}
+	return nil
+}
+
+// AccountInfo :
 func (h *HTTPHandler) AccountInfo(c echo.Context) error {
 	accNmbr, err := strconv.Atoi(c.Param("account_number"))
 	if err != nil {
@@ -45,6 +59,7 @@ func (h *HTTPHandler) AccountInfo(c echo.Context) error {
 	return c.JSON(http.StatusOK, result.Data)
 }
 
+// Transfer :
 func (h *HTTPHandler) Transfer(c echo.Context) error {
 	fromAccNmbr, err := strconv.Atoi(c.Param("account_number"))
 	if err != nil {

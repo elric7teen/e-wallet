@@ -33,7 +33,7 @@ func main() {
 		return context.HTML(http.StatusOK, "<strong>E-WALLET</strong>")
 	})
 
-	dbUser := postgresql.CreateDBConnection(os.Getenv("DB_USER_URL"), os.Getenv("MAX_CONNECTION_POOL"))
+	dbUser := postgresql.CreateDBConnection("postgres", os.Getenv("DB_USER_URL"), os.Getenv("MAX_CONNECTION_POOL"))
 	accountManagerRepo := accountManagerRepo.NewAccountManagerRepo(dbUser)
 	accountManagerUC := accountManagerUC.NewAccountManagerUsecase(accountManagerRepo)
 	accountManagerHTTPHandler := accountManagerHTTPHandler.NewAccountManagerHandler(accountManagerUC)

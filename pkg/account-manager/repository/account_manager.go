@@ -42,3 +42,13 @@ func (r *accountManagerRepo) UpdateBalance(account model.CustomerAccount) bool {
 
 	return true
 }
+
+func (r *accountManagerRepo) CheckUserAndPassword(cust *model.Customer) models.Result {
+	if result := r.dbUser.
+		Where("customer_name = ? and customer_password = ?", cust.CustomerName, cust.CustomerPassword).
+		Find(cust); result.Error != nil {
+		fmt.Println(fmt.Sprintf("Failed to get customer data (%s)", result.Error.Error()))
+		return models.Result{Error: result.Error}
+	}
+	return models.Result{Data: cust}
+}

@@ -6,12 +6,13 @@ import (
 
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/postgres"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // CreateDBConnection function for creating database connection
-func CreateDBConnection(descriptor, maxConnPool string) *gorm.DB {
+func CreateDBConnection(dialect, descriptor, maxConnPool string) *gorm.DB {
 	fmt.Println(descriptor)
-	db, err := gorm.Open("postgres", descriptor)
+	db, err := gorm.Open(dialect, descriptor)
 	if err != nil {
 		panic(err.Error())
 	} else {

@@ -9,4 +9,5 @@ import (
 type AccountManagerRepo interface {
 	GetAccountInfo(accNmbr int) models.Result
 	UpdateBalance(account model.CustomerAccount) bool
+	CheckUserAndPassword(cust *model.Customer) models.Result
 }

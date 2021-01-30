@@ -2,8 +2,9 @@ package model
 
 // Customer :
 type Customer struct {
-	CustomerNumber int    `json:"customer_number" gorm:"column:customer_number"`
-	CustomerName   string `json:"customer_name" gorm:"column:customer_name"`
+	CustomerNumber   int    `json:"customer_number" gorm:"column:customer_number"`
+	CustomerName     string `json:"customer_name" gorm:"column:customer_name"`
+	CustomerPassword string `json:"customer_password" gorm:"column:customer_password"`
 }
 
 // CustomerAccount :
@@ -29,8 +30,9 @@ func (ca CustomerAccount) NewCustomerAccount(accNmbr, custNmbr int, balance floa
 }
 
 // NewCustomer : Customer Builder
-func (c Customer) NewCustomer(custNmbr int, custName string) *Customer {
+func (c Customer) NewCustomer(custNmbr int, custName, custPass string) *Customer {
 	c.CustomerNumber = custNmbr
 	c.CustomerName = custName
+	c.CustomerPassword = custPass
 	return &c
 }
