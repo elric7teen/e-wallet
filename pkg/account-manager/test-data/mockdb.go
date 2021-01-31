@@ -51,7 +51,7 @@ func (tdb *testDB) PopulateDB() {
 }
 
 func getSQLFile() string {
-	return "/media/ghozi/6C908BD5908BA3E4/work/backup_laptop_2_aino/go/e-wallet/pkg/account-manager/test_data/db.sql"
+	return "/media/ghozi/6C908BD5908BA3E4/work/backup_laptop_2_aino/go/e-wallet/pkg/account-manager/test-data/db.sql"
 }
 
 func (tdb *testDB) runSQLFile(filepath string) error {

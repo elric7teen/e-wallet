@@ -2,7 +2,8 @@ version: "3"
 
 services:
   e-wallet:
-    image: golang:1.13-alpine
+    container_name: e-wallet-svc
+    image: golang:latest
     volumes:
       - .:/go/src/e-wallet
     working_dir: /go/src/e-wallet
@@ -12,6 +13,7 @@ services:
       - PORT=8080
       - DB_USER_URL=postgres://ghozi:ghozi@db_user_service:5432/db_user?sslmode=disable
       - MAX_CONNECTION_POOL=10
+      - ACCESS_SECRET=asklhdlaksdjasdjka1234
     command: go run cmd/e-wallet/main.go
 volumes:
   data:

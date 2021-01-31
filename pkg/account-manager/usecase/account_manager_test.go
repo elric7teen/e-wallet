@@ -2,12 +2,14 @@ package usecase
 
 import (
 	"database/sql"
+	"fmt"
 	"regexp"
 	"sync"
 	"testing"
 
 	"github.com/jinzhu/gorm"
 	"github.com/labstack/echo"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"gopkg.in/DATA-DOG/go-sqlmock.v1"
@@ -15,6 +17,7 @@ import (
 	model "linkaja.com/e-wallet/pkg/account-manager/model/db"
 	"linkaja.com/e-wallet/pkg/account-manager/model/dto"
 	"linkaja.com/e-wallet/pkg/account-manager/repository"
+	testdata "linkaja.com/e-wallet/pkg/account-manager/test-data"
 )
 
 type Suite struct {
@@ -23,21 +26,39 @@ type Suite struct {
 	mock sqlmock.Sqlmock
 	e    *echo.Echo
 	m    sync.Mutex
+	tdb  testdata.TestDB
 
 	rp repository.AccountManagerRepo
 	uc AccountManagerUsecase
 }
 
 var (
-	custAccFiled = []string{"account_number", "customer_number", "account_balance"}
-	accInfoFiled = []string{"account_number", "customer_name", "account_balance"}
-	custAcc      = model.CustomerAccount{}
+	custAccFiled    = []string{"account_number", "customer_number", "account_balance"}
+	accInfoFiled    = []string{"account_number", "customer_name", "account_balance"}
+	customerAccount = model.CustomerAccount{}
+	customer        model.Customer
 )
 
-func (s *Suite) SetupSuite() {
+func (s *Suite) useSQLite() {
+	mockDBUser, err := gorm.Open("sqlite3", "file::memory:?cache=shared")
+	if err != nil {
+		panic(err.Error())
+	} else {
+		fmt.Println("Successfully Connected!")
+	}
+	mockDBUser.Exec("PRAGMA foreign_keys = ON") // SQLite defaults to `foreign_keys = off'`
+
+	s.tdb = testdata.NewTestDB(mockDBUser)
+	s.DB = mockDBUser
+
+	s.rp = repository.NewAccountManagerRepo(s.DB)
+	s.uc = NewAccountManagerUsecase(s.rp)
+}
+
+func (s *Suite) useSQLMock() {
 	var (
-		db  *sql.DB
 		err error
+		db  *sql.DB
 	)
 
 	db, s.mock, err = sqlmock.New()
@@ -45,6 +66,24 @@ func (s *Suite) SetupSuite() {
 
 	s.DB, err = gorm.Open("postgres", db)
 	require.NoError(s.T(), err)
+
+	s.rp = repository.NewAccountManagerRepo(s.DB)
+	s.uc = NewAccountManagerUsecase(s.rp)
+}
+
+func (s *Suite) SetupSuite() {
+	// create mock db user using sqllite3
+	// file::memory:?cache=shared >>> prevent table not found
+	mockDBUser, err := gorm.Open("sqlite3", "file::memory:?cache=shared")
+	if err != nil {
+		panic(err.Error())
+	} else {
+		fmt.Println("Successfully Connected!")
+	}
+	mockDBUser.Exec("PRAGMA foreign_keys = ON") // SQLite defaults to `foreign_keys = off'`
+
+	s.tdb = testdata.NewTestDB(mockDBUser)
+	s.DB = mockDBUser
 
 	s.rp = repository.NewAccountManagerRepo(s.DB)
 	s.uc = NewAccountManagerUsecase(s.rp)
@@ -60,46 +99,22 @@ func TestInit(t *testing.T) {
 
 func (s *Suite) TestViewAccountInfo() {
 	// success view account
-	s.mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT ca.account_number as account_number, c.customer_name as customer_name, ca.account_balance as account_balance FROM customer_accounts ca join customers as c on ca.customer_number = c.customer_number WHERE (ca.account_number = $1)`)).
-		WithArgs(1).
-		WillReturnRows(sqlmock.NewRows(accInfoFiled).AddRow(1, "John", 1000))
+	s.tdb.ResetDB()
+	s.tdb.PopulateDB()
 	result := s.uc.ViewAccountInfo(1)
 	require.NoError(s.T(), result.Error)
 
-	// account not found
-	s.mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT ca.account_number as account_number, c.customer_name as customer_name, ca.account_balance as account_balance FROM customer_accounts ca join customers as c on ca.customer_number = c.customer_number WHERE (ca.account_number = $1)`)).
-		WithArgs(0).
-		WillReturnRows(sqlmock.NewRows(nil))
+	// failure on database acces
+	s.DB.DropTable(model.CustomerAccount{})
 	result = s.uc.ViewAccountInfo(0)
 	require.Error(s.T(), result.Error)
 }
 
 func (s *Suite) TestTransferCredit() {
+	s.tdb.ResetDB()
+	s.tdb.PopulateDB()
+
 	// transfer success
-	s.mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT ca.account_number as account_number, c.customer_name as customer_name, ca.account_balance as account_balance FROM customer_accounts ca join customers as c on ca.customer_number = c.customer_number WHERE (ca.account_number = $1)`)).
-		WithArgs(1).
-		WillReturnRows(sqlmock.NewRows(accInfoFiled).AddRow(1, "John", 1000))
-
-	s.mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT ca.account_number as account_number, c.customer_name as customer_name, ca.account_balance as account_balance FROM customer_accounts ca join customers as c on ca.customer_number = c.customer_number WHERE (ca.account_number = $1)`)).
-		WithArgs(2).
-		WillReturnRows(sqlmock.NewRows(accInfoFiled).AddRow(2, "Bob", 2000))
-
-	query := regexp.QuoteMeta(`UPDATE "customer_accounts" SET "account_balance" = $1 WHERE (account_number = $2)`)
-
-	custAccB := custAcc.NewCustomerAccount(2, 2, 3000)
-	s.mock.ExpectBegin()
-	s.mock.ExpectExec(query).WithArgs(custAccB.Balance, custAccB.AccountNumber).WillReturnResult(sqlmock.NewResult(0, 0))
-	s.mock.ExpectCommit()
-
-	custAccA := custAcc.NewCustomerAccount(1, 1, 0)
-	s.mock.ExpectBegin()
-	s.mock.ExpectExec(query).WithArgs(custAccA.Balance, custAccA.AccountNumber).WillReturnResult(sqlmock.NewResult(0, 0))
-	s.mock.ExpectCommit()
-
 	responseCode := s.uc.TransferCredit(dto.Param{
 		ToAccountNmbr:   2,
 		FromAccountNmbr: 1,
@@ -107,6 +122,7 @@ func (s *Suite) TestTransferCredit() {
 	})
 	require.Equal(s.T(), models.Success, responseCode)
 
+	s.tdb.ResetDB()
 	// not found layer 1
 	responseCode = s.uc.TransferCredit(dto.Param{
 		ToAccountNmbr:   2,
@@ -115,12 +131,9 @@ func (s *Suite) TestTransferCredit() {
 	})
 	require.Equal(s.T(), models.NotFound, responseCode)
 
+	s.tdb.PopulateDB()
+	s.DB.Where("account_number = ? ", 2).Delete(&customerAccount)
 	// not found layer 2
-	s.mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT ca.account_number as account_number, c.customer_name as customer_name, ca.account_balance as account_balance FROM customer_accounts ca join customers as c on ca.customer_number = c.customer_number WHERE (ca.account_number = $1)`)).
-		WithArgs(1).
-		WillReturnRows(sqlmock.NewRows(accInfoFiled).AddRow(1, "John", 1000))
-
 	responseCode = s.uc.TransferCredit(dto.Param{
 		ToAccountNmbr:   2,
 		FromAccountNmbr: 1,
@@ -128,25 +141,18 @@ func (s *Suite) TestTransferCredit() {
 	})
 	require.Equal(s.T(), models.NotFound, responseCode)
 
+	s.tdb.PopulateDB()
 	// insufficient balance
-	s.mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT ca.account_number as account_number, c.customer_name as customer_name, ca.account_balance as account_balance FROM customer_accounts ca join customers as c on ca.customer_number = c.customer_number WHERE (ca.account_number = $1)`)).
-		WithArgs(1).
-		WillReturnRows(sqlmock.NewRows(accInfoFiled).AddRow(1, "John", 500))
-
-	s.mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT ca.account_number as account_number, c.customer_name as customer_name, ca.account_balance as account_balance FROM customer_accounts ca join customers as c on ca.customer_number = c.customer_number WHERE (ca.account_number = $1)`)).
-		WithArgs(2).
-		WillReturnRows(sqlmock.NewRows(accInfoFiled).AddRow(2, "Bob", 2000))
-
 	responseCode = s.uc.TransferCredit(dto.Param{
 		ToAccountNmbr:   2,
 		FromAccountNmbr: 1,
-		Amount:          1000,
+		Amount:          5000,
 	})
 	require.Equal(s.T(), models.InsufBalance, responseCode)
 
-	// general error
+	// SPECIAL CASE : cant test using sqlite database mock
+	// use sqlmock instead
+	s.useSQLMock()
 	s.mock.ExpectQuery(regexp.QuoteMeta(
 		`SELECT ca.account_number as account_number, c.customer_name as customer_name, ca.account_balance as account_balance FROM customer_accounts ca join customers as c on ca.customer_number = c.customer_number WHERE (ca.account_number = $1)`)).
 		WithArgs(1).
@@ -157,10 +163,28 @@ func (s *Suite) TestTransferCredit() {
 		WithArgs(2).
 		WillReturnRows(sqlmock.NewRows(accInfoFiled).AddRow(2, "Bob", 2000))
 
+	// general error
 	responseCode = s.uc.TransferCredit(dto.Param{
 		ToAccountNmbr:   2,
 		FromAccountNmbr: 1,
 		Amount:          1000,
 	})
 	require.Equal(s.T(), models.InternalServerError, responseCode)
+
+	// return mock db to sqlite
+	s.useSQLite()
+}
+
+func (s *Suite) Test_IsUserExist() {
+	s.tdb.ResetDB()
+	s.tdb.PopulateDB()
+	// test user exist
+	custA := customer.NewCustomer(1, "UNCLE BOB", "abcdef")
+	require.True(s.T(), s.uc.IsUserExist(custA))
+	// test user not exist
+	custB := customer.NewCustomer(2, "Jack", "abcdef")
+	require.False(s.T(), s.uc.IsUserExist(custB))
+	// test failure on database access
+	s.DB.DropTableIfExists(model.Customer{})
+	require.False(s.T(), s.uc.IsUserExist(custB))
 }

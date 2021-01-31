@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/labstack/echo"
+	jwtconfig "linkaja.com/e-wallet/config/jwt"
 	models "linkaja.com/e-wallet/lib/base_models"
 	model "linkaja.com/e-wallet/pkg/account-manager/model/db"
 	"linkaja.com/e-wallet/pkg/account-manager/model/dto"
@@ -32,12 +33,23 @@ func (h *HTTPHandler) Mount(group *echo.Group) {
 
 // Login :
 func (h *HTTPHandler) Login(c echo.Context) error {
-	var cust model.Customer
+	cust := new(model.Customer)
 	if err := c.Bind(cust); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, "Invalid json provided")
-		return err
+		return c.JSON(http.StatusBadRequest, models.ResponseBadReq("invalid json provided"))
 	}
-	return nil
+
+	if !h.accountManagerUC.IsUserExist(cust) {
+		return c.JSON(http.StatusBadRequest, models.ResponseBadReq("invalid credentials"))
+
+	}
+
+	result := jwtconfig.CreateToken(cust.CustomerNumber)
+	if result.Error != nil {
+		return c.JSON(http.StatusBadRequest, models.ResponseBadReq("failed to create token"))
+
+	}
+
+	return c.JSON(http.StatusOK, result.Data.(string))
 }
 
 // AccountInfo :

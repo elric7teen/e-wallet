@@ -10,27 +10,19 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"gopkg.in/DATA-DOG/go-sqlmock.v1"
 	model "linkaja.com/e-wallet/pkg/account-manager/model/db"
-	testdata "linkaja.com/e-wallet/pkg/account-manager/test_data"
+	testdata "linkaja.com/e-wallet/pkg/account-manager/test-data"
 )
 
 type Suite struct {
 	suite.Suite
-	DB   *gorm.DB
-	mock sqlmock.Sqlmock
-	e    *echo.Echo
-	m    sync.Mutex
-	tdb  testdata.TestDB
+	DB  *gorm.DB
+	e   *echo.Echo
+	m   sync.Mutex
+	tdb testdata.TestDB
 
 	rp AccountManagerRepo
 }
-
-var (
-	custAccFiled = []string{"account_number", "customer_number", "account_balance"}
-	accInfoFiled = []string{"account_number", "customer_name", "account_balance"}
-	custAcc      = model.CustomerAccount{}
-)
 
 func (s *Suite) SetupSuite() {
 	// create mock db user using sqllite3
@@ -71,7 +63,8 @@ func (s *Suite) TestUpdateBalance() {
 	s.tdb.ResetDB()
 	s.tdb.PopulateDB()
 
-	custAccA := custAcc.NewCustomerAccount(1, 1, 1000)
+	customerAccount := model.CustomerAccount{}
+	custAccA := customerAccount.NewCustomerAccount(1, 1, 1000)
 	isSuccess := s.rp.UpdateBalance(*custAccA)
 	require.Equal(s.T(), true, isSuccess)
 

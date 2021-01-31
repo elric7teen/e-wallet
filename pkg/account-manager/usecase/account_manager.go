@@ -18,6 +18,20 @@ func NewAccountManagerUsecase(repo repository.AccountManagerRepo) AccountManager
 	}
 }
 
+func (uc accountManagerUsecase) IsUserExist(cust *model.Customer) bool {
+	status := true
+	result := uc.repo.CheckUserAndPassword(cust)
+	switch customer := result.Data.(type) {
+	case *model.Customer:
+		if customer == cust {
+			status = true
+		}
+	default:
+		status = false
+	}
+	return status
+}
+
 func (uc accountManagerUsecase) ViewAccountInfo(accNmbr int) models.Result {
 	result := uc.repo.GetAccountInfo(accNmbr)
 	if result.Error != nil {

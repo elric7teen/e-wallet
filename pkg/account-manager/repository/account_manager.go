@@ -43,6 +43,8 @@ func (r *accountManagerRepo) UpdateBalance(account model.CustomerAccount) bool {
 	return true
 }
 
+// CheckUserAndPassword : validate customer
+// if exist return pointer of customer
 func (r *accountManagerRepo) CheckUserAndPassword(cust *model.Customer) models.Result {
 	if result := r.dbUser.
 		Where("customer_name = ? and customer_password = ?", cust.CustomerName, cust.CustomerPassword).
